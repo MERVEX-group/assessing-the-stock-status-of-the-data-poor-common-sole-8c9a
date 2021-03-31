@@ -1,0 +1,398 @@
+---
+title: "Mean length-based mortality estimators (MLZ)"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Preparing data
+
+### Read data and format it
+
+The effort time-series is derived from the ratio of the catch and a LPUE series of Portugal. 
+
+```{r,message=FALSE,include=FALSE}
+
+
+library(fishmethods)
+library(dplyr)
+library(lattice)
+library(data.table)
+library(reshape2)
+
+# Modification for discrete (annual) reproduction
+source('gedamke.hoenig_BFGS_discrete.r')
+# THoG model
+source('mleneffort.r')
+# YPR estimator
+source('ypr_ml.r')
+
+# Function to calculate mean lengths
+neph_Lbar <- function(input, Lc){
+  sub <- subset(input, Length >= Lc & !(value==0))
+  sub <- data.table(sub)
+  fin <- sub[, list(
+    mlen = sum(value * Length) / sum(value),
+    ss_bins = length(value),
+    ss = 1
+  ),
+  by = list(Year)]
+  fin$Year <- as.numeric(fin$Year)
+  out <- fin
+}
+```
+
+
+```{r,message=FALSE}
+input_lenfreq <- read.csv('data_freq.csv')
+input_effort <- read.csv('effort.csv')
+colnames(input_lenfreq)[1] <- "Length"
+
+name <- "Solea"
+sex <- "Both"
+K <- 0.22
+Linf <- 48.9
+max_age <- 15 
+
+input_melt <- melt(input_lenfreq, id.vars="Length", variable.name="Year")
+input_melt$Year <- as.numeric(substr(input_melt$Year, 2, 5))
+
+head(input_lenfreq)
+tail(input_lenfreq)
+
+input_effort
+```
+
+### Histograms and definition of length of full selectivity ($L_c$)
+
+
+```{r}
+stockname <- paste(name, sex)
+
+par(mfrow=c(1, 1))
+input_tot <- rowSums(input_lenfreq[, -1])
+input_lengths <- input_lenfreq[,1]
+
+Lc <- input_lengths[which.max(input_tot)] ; Lc
+barplot(input_tot, names.arg=input_lengths, 
+        main=paste(stockname, "Length Frequency Distribution \nPeak=", Lc))
+```
+
+
+
+### Calculate annual mean lengths of animals of lengths larger than $L_c$ 
+
+```{r}
+ml_gh <- neph_Lbar(input=input_melt, Lc=Lc)
+ml_gh
+```
+
+## Then model
+
+Note that the initial value of $q$ have been fixed as the value estimate using M fixed in Then model.
+
+### Reference model
+
+```{r}
+ml_thog <- left_join(input_effort, 
+                     ml_gh, 
+                     by = "Year")
+ml_thog$ss_bins[is.na(ml_thog$ss_bins)] <- 0
+ml_thog$ss[is.na(ml_thog$ss)] <- 0
+```
+
+```{r}
+# Guess for q
+q0=0.15/mean(ml_thog$effort)
+###
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+
+### Model fixing M
+
+```{r}
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.31), est.M = F)
+
+
+```
+
+
+
+### Sensitivity analysis of $L_{\inf}$
+
+#### Overestimation
+
+##### $L_{\inf} \times 1.1$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf*1.1, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+
+#### Underestimation 
+
+###### $L_{\inf} \times 0.9$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf*0.9, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+### Sensitivity analysis of $K$
+
+#### Overestimation
+
+##### $K \times 1.1$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K*1.1,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+#### Underestimation 
+
+###### $K \times 0.9$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K*0.9,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+### Sensitivity analysis of $q$ initial value
+
+#### Overestimation
+
+##### $q \times 1.1$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0*1.1),
+            stM = c(.3))
+```
+
+
+
+
+#### Underestimation 
+
+###### $q \times 0.9$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0*0.9),
+            stM = c(.3))
+```
+
+
+### Sensitivity analysis of $max_{age}$
+
+
+#### Overestimation
+
+##### $max_{age} \times 1.1$
+
+
+```{r}
+max_age <- 15*1.1
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+
+#### Underestimation 
+
+###### $max_{age} \times 0.9$
+
+
+```{r}
+max_age <- 15*0.9
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+### Sensitivity analysis of $L_c$
+
+
+#### Overestimation
+
+##### $L_c \times 1.05$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc*1.05, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```
+
+
+
+
+#### Underestimation 
+
+###### $L_c \times 0.95$
+
+
+```{r}
+max_age <- 15
+mlen_effort(year = ml_thog$Year,
+            mlen = ml_thog$mlen,
+            effort = ml_thog$effort, 
+            ss = ml_thog$ss,
+            K = K,
+            Linf = Linf, 
+            Lc = Lc*0.95, 
+            n_cohort = 1,
+            n_age = max_age, 
+            init_effort = rep(ml_thog$effort[1], max_age),
+            stq = c(q0),
+            stM = c(.3))
+```

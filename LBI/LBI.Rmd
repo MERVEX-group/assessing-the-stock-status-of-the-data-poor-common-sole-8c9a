@@ -1,0 +1,138 @@
+---
+title: "Length Based Indicators (LBI)"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE,include=FALSE}
+library(kableExtra)
+library(tidyverse)
+
+# require (rJava)
+# .jinit()
+# .jcall('java.lang.System','S','getProperty','java.version')
+# [1] "1.8.0_211"
+#devtools::install_github('davidgohel/ReporteRsjars')
+# devtools::install_github('davidgohel/ReporteRs')
+library(LBSPR) 
+library(reshape2)
+library(ggplot2) 
+library(tidyr)
+library(ReporteRs) 
+source("https://raw.githubusercontent.com/ices-tools-dev/LBIndicator_shiny/master/utilities.R") 
+source("utilities_vpaz.R") 
+```
+
+
+Loading catch at length per year:
+
+
+```{r,warning=FALSE, message=FALSE,}
+freq <- read.csv("data_freq.csv", stringsAsFactors = FALSE)
+head(freq)
+tail(freq)
+```
+
+Loading mean weights-at-length per year (a=0.009476898 and b=3.018329):
+
+
+```{r,warning=FALSE, message=FALSE,}
+wal <- read.csv("data_wei2.csv", stringsAsFactors = FALSE)
+head(wal)
+tail(wal)
+```
+
+
+Length distributions over time must be unimodal, then maybe the length frequency data needs to be grouped.
+
+
+```{r, message=FALSE}
+bin_plot(freq, 1, "cm")
+```
+
+Based on the previous plot we have decided to apply the method for Binwidth parameter
+ (width of length bins) equal to 1.
+ 
+ 
+## Reference model
+
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9, lmat=26, mk_ratio=1.41,wal)
+lb_plot(freq, 1, "cm", linf=48.9, lmat=26, mk_ratio=1.41,wal)
+```
+
+
+## Sensitivity analysis of $L_{\inf}$
+
+### Overestimation
+
+#### $L_{\inf} \times 1.1$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9*1.1, lmat=26, mk_ratio=1.41,wal)
+```
+
+### Underestimation 
+
+#### $L_{\inf} \times 0.9$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9*0.9, lmat=26, mk_ratio=1.41,wal)
+```
+
+
+## Sensitivity analysis of $M/K$
+
+### Overestimation
+
+#### $M/K \times 1.1$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9, lmat=26, mk_ratio=1.41*1.1,wal)
+```
+
+
+### Underestimation 
+
+#### $M/K \times 0.9$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9, lmat=26, mk_ratio=1.41*0.9,wal)
+```
+
+
+## Sensitivity analysis of $L_{mat}$
+
+### Overestimation
+
+#### $L_{mat} \times 1.1$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9, lmat=26*1.1, mk_ratio=1.41,wal)
+```
+
+
+
+### Underestimation 
+
+#### $L_{mat} \times 0.9$
+
+```{r,warning=FALSE}
+lb_tableSH(freq, 1, "cm", linf=48.9, lmat=26*0.9, mk_ratio=1.41,wal)
+```
+
